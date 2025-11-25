@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHIB Ads WebApp</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap'); 
+
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Vazirmatn', Arial, Helvetica, sans-serif;overflow:hidden;background:#fff}
+        
+        /* شاشة التحميل - تحسينات النيون */
+        .loading-screen{
+            position:fixed;inset:0;
+            background: #0d0c1d; /* خلفية داكنة صلبة */
+            display:flex;flex-direction:column;justify-content:center;align-items:center;
+            z-index:9999;transition:opacity .5s ease-out;
+        }
+        .loading-screen.hidden{opacity:0;pointer-events:none}
+        .loading-content{text-align:center;color:#fff}
+        .progress-container{
+            width:300px;height:12px;background:rgba(255,255,255,.05);
+            border-radius:10px;overflow:hidden;margin:20px 0;
+            box-shadow: 0 0 5px #0ff, 0 0 10px #0ff; /* تأثير نيون خفيف */
+        }
+        .progress-bar{
+            height:100%;width:0;background:#0ff;transition:width .4s ease-in-out;
+        }
+        .loading-text{
+            font-size:1.1em;font-weight:700;color:#0ff;
+            text-shadow: 0 0 5px #0ff;
+        }
+
+        /* الشاشات الرئيسية والفرعية */
+        .main-screen, .spin-screen, .withdraw-screen, .invite-screen{
+            display:none;
+            padding:20px;
+            min-height:100vh;
+            background:#0d0c1d;
+            color:#fff;
+            position:fixed;
+            inset:0;
+            overflow-y:auto;
+        }
+        .main-screen.visible, .spin-screen.visible, .withdraw-screen.visible, .invite-screen.visible{
+            display:block;
+        }
+
+        /* واجهة المستخدم (Header) */
+        .header{
+            display:flex;justify-content:space-between;align-items:center;
+            padding-bottom:15px;border-bottom:1px solid rgba(255,255,255,.1);
+            margin-bottom:20px;
+        }
+        .user-info{display:flex;align-items:center}
+        .user-image{
+            width:40px;height:40px;border-radius:50%;object-fit:cover;
+            margin-left:10px;border:2px solid #0ff;
+        }
+        .placeholder{
+            width:40px;height:40px;border-radius:50%;background:#555;
+            display:flex;justify-content:center;align-items:center;color:#fff;font-weight:bold;
+            margin-left:10px;
+        }
+        .user-text h4{margin:0;font-size:1.1em;color:#0ff;}
+        .user-text p{margin:0;font-size:.8em;color:#aaa}
+
+        /* الرصيد */
+        .balance-box{
+            background:rgba(0,255,255,.1);border-radius:12px;
+            padding:15px;text-align:center;margin-bottom:20px;
+            box-shadow: 0 0 10px rgba(0,255,255,.5);
+        }
+        .balance-box h2{font-size:1.2em;color:#aaa;margin-bottom:5px}
+        .balance-box p{font-family:'Orbitron', sans-serif;font-size:2.5em;margin:0;color:#0ff;}
+
+        /* الأقسام (Ads, Spin, Invite) */
+        .section-box{
+            background:rgba(255,255,255,.05);border-radius:12px;
+            padding:15px;margin-bottom:15px;
+            display:flex;flex-direction:column;
+        }
+        .section-header{
+            display:flex;justify-content:space-between;align-items:center;
+            margin-bottom:10px;
+        }
+        .section-header h3{color:#fff;font-size:1.1em}
+        .limit-display{font-size:.9em;color:#0ff;font-weight:bold}
+
+        /* شريط التقدم */
+        .progress-bar-small{
+            height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;
+            margin-top:5px;margin-bottom:15px;
+        }
+        .progress-fill{
+            height:100%;width:0;background:linear-gradient(90deg, #0ff, #fff);
+            transition:width .4s ease-in-out;
+        }
+
+        /* الأزرار العامة */
+        .action-button{
+            padding:10px 15px;border:none;border-radius:8px;
+            font-size:1em;font-weight:bold;cursor:pointer;
+            transition:background-color .3s, transform .1s;
+            width:100%;
+            margin-top:10px;
+        }
+        .btn-primary{
+            background:#0ff;color:#0d0c1d;
+            box-shadow: 0 0 10px rgba(0,255,255,.8);
+        }
+        .btn-secondary{
+            background:#333;color:#0ff;border:1px solid #0ff;
+        }
+        .btn-primary:hover:not(:disabled), .btn-secondary:hover:not(:disabled){
+            transform:scale(0.98);
+        }
+        .action-button:disabled{
+            background:#555;color:#ccc;cursor:not-allowed;box-shadow:none;
+        }
+
+        /* --- شاشة الدوران (Spin Screen) --- */
+        .spin-content{
+            display:flex;flex-direction:column;align-items:center;text-align:center;
+            padding-top:20px;
+        }
+        .wheel-container{
+            width:300px;height:300px;position:relative;margin:30px auto;
+        }
+        .wheel-pointer{
+            position:absolute;top:-20px;left:50%;transform:translateX(-50%);
+            width:0;height:0;border-left:15px solid transparent;
+            border-right:15px solid transparent;border-bottom:30px solid #ff007f; /* مؤشر بلون مميز */
+            z-index:10;
+        }
+        #spinCanvas{
+            border-radius:50%;border:10px solid #0ff;
+            background:#1e1e3f;
+            transition:transform 0s;
+        }
+        .spin-result{
+            margin-top:20px;font-size:1.5em;color:#fff;min-height:30px;
+            text-shadow: 0 0 10px #0ff;
+        }
+
+        /* --- شاشة السحب (Withdraw Screen) --- */
+        .withdraw-form{
+            background:rgba(255,255,255,.05);border-radius:12px;
+            padding:20px;margin-top:20px;
+        }
+        .form-group{margin-bottom:15px;}
+        .form-group label{display:block;margin-bottom:5px;color:#0ff;}
+        .form-group input{
+            width:100%;padding:10px;border-radius:6px;border:1px solid #0ff;
+            background:#1e1e3f;color:#fff;font-size:1em;
+        }
+        .withdraw-history h4{color:#fff;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:5px;margin-bottom:10px;}
+        .history-item{
+            display:flex;justify-content:space-between;padding:8px 0;
+            border-bottom:1px dashed rgba(255,255,255,.05);font-size:.9em;
+        }
+        .history-item span:first-child{color:#aaa;}
+        .history-item span:last-child{font-weight:bold;}
+        .status-Pending{color:yellow;}
+        .status-Completed{color:lime;}
+        .status-Rejected{color:red;}
+
+        /* --- شاشة الدعوات (Invite Screen) --- */
+        .invite-content{text-align:center;padding-top:20px;}
+        .invite-content p{margin-bottom:20px;color:#aaa;}
+        .referral-link-container{
+            display:flex;margin-bottom:20px;
+        }
+        #referralLinkInput{
+            flex-grow:1;padding:10px;border-radius:6px 0 0 6px;
+            border:1px solid #0ff;background:#1e1e3f;color:#fff;font-size:.9em;
+            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:left;
+        }
+        .copy-btn{
+            width:60px;background:#0ff;color:#0d0c1d;border:none;
+            border-radius:0 6px 6px 0;font-weight:bold;cursor:pointer;
+        }
+        .referrals-box{
+            background:rgba(0,255,255,.1);border-radius:12px;
+            padding:15px;margin-top:30px;
+        }
+        .referrals-box h4{color:#0ff;margin-bottom:5px;}
+        .referrals-box p{font-size:2em;font-family:'Orbitron', sans-serif;margin:0;}
+    </style>
+</head>
+<body>
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-content">
+            <h1 class="loading-text">SHIB Ads</h1>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <p id="loadingText">Initializing Telegram WebApp...</p>
+        </div>
+    </div>
+
+    <div class="main-screen visible" id="mainScreen">
+        <div class="header">
+            <div class="user-info">
+                <div class="placeholder">🤖</div>
+                <img id="userImage" class="user-image" style="display:none;" alt="User Photo">
+                <div class="user-text">
+                    <h4 id="userName">Guest User</h4>
+                    <p id="userId">ID: ---</p>
+                </div>
+            </div>
+            <button class="action-button btn-secondary" style="width:auto;padding:8px 15px;" onclick="showWithdraw()">
+                Withdraw
+            </button>
+        </div>
+
+        <div class="balance-box">
+            <h2>Your Balance</h2>
+            <p id="shibBalance">0 SHIB</p>
+        </div>
+
+        <div class="section-box">
+            <div class="section-header">
+                <h3>📺 Watch Ads</h3>
+                <span class="limit-display" id="adsLimit">
+                    <span id="adsCount">0</span>/<span id="adsMax">100</span>
+                </span>
+            </div>
+            <div class="progress-bar-small">
+                <div class="progress-fill" id="dailyProgressFill"></div>
+            </div>
+            <button class="action-button btn-primary" id="watchAdBtn" onclick="watchAds()">
+                Watch Ad & Earn SHIB
+            </button>
+        </div>
+
+        <div class="section-box">
+            <div class="section-header">
+                <h3>🎰 Spin to Earn</h3>
+                <span class="limit-display" id="spinsLimit">
+                    <span id="spinsCount">0</span>/<span id="spinsMax">15</span>
+                </span>
+            </div>
+            <div class="progress-bar-small">
+                <div class="progress-fill" id="spinProgressFill"></div>
+            </div>
+            <button class="action-button btn-secondary" id="spinViewBtn" onclick="showSpin()">
+                Go to Wheel
+            </button>
+        </div>
+
+        <div class="section-box">
+            <div class="section-header">
+                <h3>🫂 Invite Friends</h3>
+                <span class="limit-display" id="referralStats">
+                    Total: <span id="referralsCountDisplay">0</span>
+                </span>
+            </div>
+            <p style="font-size:.9em; color:#aaa; margin-top:5px;">Earn 5% commission on every ad your referrals watch.</p>
+            <button class="action-button btn-secondary" id="inviteViewBtn" onclick="inviteFriends()">
+                Get Referral Link
+            </button>
+        </div>
+    </div>
+
+    <div class="spin-screen" id="spinScreen">
+        <div class="header">
+            <button class="action-button btn-secondary" style="width:auto;padding:8px 15px;" onclick="hideSpin()">
+                ← Back
+            </button>
+            <p class="balance-box" style="margin:0;padding:10px;font-size:1em;">
+                Balance: <span id="spinBalanceDisplay">0 SHIB</span>
+            </p>
+        </div>
+        
+        <div class="spin-content">
+            <div class="section-header" style="width:100%; justify-content:center; margin-bottom: 20px;">
+                <h3>Today's Spins: <span id="spinCountDisplay">0</span>/<span id="spinMaxDisplay">15</span></h3>
+            </div>
+            <div class="wheel-container">
+                <div class="wheel-pointer"></div>
+                <canvas id="spinCanvas" width="300" height="300"></canvas>
+            </div>
+            <div class="spin-result" id="spinResult">Spin for a chance to win!</div>
+            <button class="action-button btn-primary" id="spinBtn" onclick="startSpin()" disabled>
+                SPIN
+            </button>
+        </div>
+    </div>
+
+    <div class="withdraw-screen" id="withdrawScreen">
+        <div class="header">
+            <button class="action-button btn-secondary" style="width:auto;padding:8px 15px;" onclick="hideWithdraw()">
+                ← Back
+            </button>
+            <p class="balance-box" style="margin:0;padding:10px;font-size:1em;">
+                Available: <span id="withdrawBalanceDisplay">0 SHIB</span>
+            </p>
+        </div>
+        
+        <div class="withdraw-form">
+            <h3>💸 Request Withdrawal (Min 400 SHIB)</h3>
+            <p style="font-size:.8em; color:red; margin-bottom:15px;">We only support withdrawal to Binance User ID (UID).</p>
+            
+            <div class="form-group">
+                <label for="binanceId">Binance User ID (UID):</label>
+                <input type="number" id="binanceId" placeholder="Enter your 8-digit or longer Binance UID" required>
+            </div>
+            <div class="form-group">
+                <label for="withdrawAmount">Amount in SHIB:</label>
+                <input type="number" id="withdrawAmount" placeholder="Min 400 SHIB" required min="400">
+            </div>
+            <button class="action-button btn-primary" onclick="confirmWithdraw()">
+                Confirm Withdrawal
+            </button>
+        </div>
+
+        <div class="withdraw-history" style="margin-top:30px;">
+            <h4>Withdrawal History</h4>
+            <div id="historyList">
+                <p style="color:#aaa; text-align:center;">No history yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="invite-screen" id="inviteScreen">
+        <div class="header">
+            <button class="action-button btn-secondary" style="width:auto;padding:8px 15px;" onclick="hideInvite()">
+                ← Back
+            </button>
+        </div>
+
+        <div class="invite-content">
+            <h3>💌 Invite & Earn</h3>
+            <p>Share your link to earn 5% commission on all earnings from your friends' ad views.</p>
+            
+            <div class="referral-link-container">
+                <input type="text" id="referralLinkInput" value="Generating Link..." readonly>
+                <button class="copy-btn" onclick="copyReferralLink()">Copy</button>
+            </div>
+            
+            <div class="referrals-box">
+                <h4>Total Referrals</h4>
+                <p id="referralsCountDisplay">0</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://ad.gigapub.tech/script?id=3459"></script>
+    <script>
+        /* ===== التحميل ===== */
+        const loadingScreen = document.getElementById('loadingScreen');
+        const progressBar = document.getElementById('progressBar');
+        const loadingText = document.getElementById('loadingText');
+        const mainScreen = document.getElementById('mainScreen');
+        
+        let loadProgress = 0;
+        const loadSteps = [
+            'Initializing Telegram WebApp...', 
+            'Loading assets...', 
+            'Connecting to API...', 
+            'Fetching user data...'
+        ];
+        
+        function updateLoader(step) {
+            loadProgress++;
+            const progress = Math.min(loadProgress * (100 / loadSteps.length), 100);
+            progressBar.style.width = progress + '%';
+            loadingText.textContent = step;
+        }
+
+        setTimeout(() => {
+            Telegram.WebApp.ready();
+            updateLoader(loadSteps[1]);
+        }, 500);
+
+        setTimeout(() => {
+            updateLoader(loadSteps[2]);
+        }, 1000);
+
+        setTimeout(async () => {
+            updateLoader(loadSteps[3]);
+            await initDailyProgress(); 
+            
+            setTimeout(() => {
+                loadingScreen.classList.add('hidden');
+                mainScreen.classList.add('visible');
+            }, 500);
+        }, 1500);
+
+        /* ===== Telegram User & Referral Setup ===== */
+        let tgUser = null;
+        if(Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user){
+            tgUser = Telegram.WebApp.initDataUnsafe.user;
+            const photoUrl = tgUser.photo_url;
+            const userName = tgUser.first_name + (tgUser.last_name? ' '+tgUser.last_name:'');
+            const userId = tgUser.id;
+            const imgEl  = document.getElementById('userImage');
+            const nameEl = document.getElementById('userName');
+            const idEl   = document.getElementById('userId');
+            const placeHolder = document.querySelector('.placeholder');
+            if(photoUrl){
+                imgEl.src = photoUrl;
+                imgEl.style.display = 'block';
+                placeHolder.style.display = 'none';
+            }
+            nameEl.textContent = userName;
+            idEl.textContent   = 'ID: ' + userId;
+        }
+
+        function getRefParam() {
+            let referrerId = null;
+            const REF_PREFIX = 'ref_';
+
+            if (Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.start_param) {
+                const startParam = Telegram.WebApp.initDataUnsafe.start_param;
+                if (startParam.startsWith(REF_PREFIX)) {
+                    referrerId = startParam.substring(REF_PREFIX.length);
+                    console.log('Referrer ID from start_param:', referrerId);
+                }
+            } 
+            return referrerId; 
+        }
+
+        let referrerId = getRefParam();
+        const API_URL = '/api'; // ⬅️ **تعديل هام:** استبدل هذا برابط Vercel الكامل بعد النشر
+
+        // ------------------------------------------------------------------
+        // **دالة fetchApi المُحَدَّثة** (تضيف التوقيع الأمني وتصلح أخطاء Progress)
+        // ------------------------------------------------------------------
+        async function fetchApi(payload) {
+            if (!tgUser) {
+                Telegram.WebApp.showAlert('❌ User data not initialized. Cannot perform action.');
+                return { ok: false, error: 'User not initialized' };
+            }
+            
+            // ⬅️ الإضافة الأمنية: إرسال initData مع كل طلب
+            const initData = Telegram.WebApp.initData || '';
+
+            // ⬅️ إصلاح خطأ TypeError: is not a function
+            if (typeof Telegram.WebApp.showProgress === 'function') {
+                Telegram.WebApp.showProgress();
+            }
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ...payload,
+                        user_id: tgUser.id,
+                        init_data: initData // ⬅️ إضافة بيانات التوقيع (الأمان)
+                    }),
+                });
+
+                // ⬅️ إصلاح خطأ TypeError: is not a function
+                if (typeof Telegram.WebApp.hideProgress === 'function') {
+                    Telegram.WebApp.hideProgress();
+                }
+
+                const data = await response.json();
+
+                if (!response.ok || !data.ok) {
+                    const errorMessage = data.error || `Server Error: ${response.status} ${response.statusText}`;
+                    console.error(`API Call failed for type ${payload.type}:`, errorMessage);
+                    
+                    if (response.status === 403 && data.error.includes('Security validation failed')) {
+                         Telegram.WebApp.showAlert('🚨 SECURITY ERROR: Request signature is invalid. Please restart the Mini App.');
+                    } else if (response.status === 403 && data.error.includes('Daily')) {
+                         Telegram.WebApp.showAlert(`⚠️ ${data.error}`);
+                    } else {
+                         Telegram.WebApp.showAlert(`❌ API Error (${payload.type}): ${errorMessage}`);
+                    }
+                    return { ok: false, error: errorMessage };
+                }
+
+                return data;
+            } catch (error) {
+                // ⬅️ إصلاح خطأ TypeError: is not a function في حالة خطأ الشبكة
+                if (typeof Telegram.WebApp.hideProgress === 'function') {
+                    Telegram.WebApp.hideProgress();
+                }
+                console.error(`General Fetch Error for type ${payload.type}:`, error.message);
+                Telegram.WebApp.showAlert(`❌ Network Error: ${error.message}`);
+                return { ok: false, error: error.message };
+            }
+        }
+
+        /* ===== أنظمة المكافآت والحدود ===== */
+        const DAILY_MAX = 100;
+        const DAILY_MAX_SPINS = 15;
+        const ADS_CLICK_COOLDOWN = 2000; // 2 ثانية
+        const SPIN_CLICK_COOLDOWN = 1000; // 1 ثانية
+        
+        let shibBalance = 0; 
+        let adsWatchedToday = 0;
+        let spinsToday = 0; 
+        let withdrawalHistory = [];
+        let referralsCount = 0; 
+        let spinning = false;
+
+        const sectors = [5, 10, 15, 20, 5]; // قطاعات الدوران بالترتيب
+        
+        // عناصر شاشة الدوران
+        const canvas = document.getElementById('spinCanvas');
+        const spinBtn = document.getElementById('spinBtn');
+        const spinResult = document.getElementById('spinResult');
+        const ctx = canvas.getContext('2d');
+        let currentAngle = 0;
+        
+        // رسم العجلة (باقي كما هو)
+        function drawWheel() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = centerX - 5;
+            const numSectors = sectors.length;
+            const anglePerSector = (2 * Math.PI) / numSectors;
+            const colors = ['#FF007F', '#0FF', '#FFD700', '#FF4500', '#8A2BE2']; // ألوان قطاعات النيون
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            sectors.forEach((prize, index) => {
+                const startAngle = index * anglePerSector;
+                const endAngle = (index + 1) * anglePerSector;
+                
+                // رسم القطاع
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fillStyle = colors[index % colors.length];
+                ctx.fill();
+                ctx.strokeStyle = '#0d0c1d';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // إضافة النص (المكافأة)
+                const textAngle = startAngle + anglePerSector / 2;
+                const textX = centerX + Math.cos(textAngle) * radius * 0.6;
+                const textY = centerY + Math.sin(textAngle) * radius * 0.6;
+                
+                ctx.save();
+                ctx.translate(textX, textY);
+                ctx.rotate(textAngle + Math.PI / 2);
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#0d0c1d'; 
+                ctx.font = 'bold 16px Vazirmatn';
+                ctx.fillText(`${prize} SHIB`, 0, 0);
+                ctx.restore();
+            });
+            
+            // رسم الدائرة الداخلية
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius * 0.1, 0, 2 * Math.PI);
+            ctx.fillStyle = '#0d0c1d';
+            ctx.fill();
+            ctx.strokeStyle = '#0ff';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+
+        /* ===== وظائف تحديث الحالة والواجهة ===== */
+
+        function updateState(data) {
+            shibBalance = data.balance !== undefined ? data.balance : shibBalance;
+            adsWatchedToday = data.ads_watched_today !== undefined ? data.ads_watched_today : adsWatchedToday;
+            spinsToday = data.spins_today !== undefined ? data.spins_today : spinsToday;
+            referralsCount = data.referrals_count !== undefined ? data.referrals_count : referralsCount;
+            withdrawalHistory = data.withdrawal_history !== undefined ? data.withdrawal_history : withdrawalHistory;
+            updateUI();
+        }
+        
+        async function loadUserData() {
+            if (!tgUser) return;
+            
+            // لا حاجة لـ init_data هنا لأنها عملية قراءة غير حساسة.
+            const result = await fetchApi({ type: 'getUserData' });
+
+            if (result.ok) {
+                updateState({
+                    balance: result.data.balance,
+                    ads_watched_today: result.data.ads_watched_today,
+                    spins_today: result.data.spins_today,
+                    referrals_count: result.data.referrals_count,
+                    withdrawal_history: (result.data.withdrawal_history || []).map(item => ({
+                        amount: item.amount,
+                        status: item.status,
+                        date: new Date(item.created_at).toLocaleDateString('en-GB') 
+                    }))
+                });
+            }
+        }
+        
+        async function initDailyProgress(){
+            if (!tgUser) return;
+
+            // 1. التسجيل/التحقق من الوجود (لا يحتاج init_data)
+            await fetchApi({ 
+                type: 'register',
+                ref_by: referrerId ? referrerId : null 
+            });
+            
+            // 2. تحميل بيانات المستخدم
+            await loadUserData(); 
+        }
+        
+        function updateUI(){
+            // الشاشة الرئيسية
+            document.getElementById('shibBalance').textContent = shibBalance.toLocaleString() + ' SHIB';
+            document.getElementById('adsCount').textContent = adsWatchedToday;
+            document.getElementById('spinsCount').textContent = spinsToday; 
+            document.getElementById('referralsCountDisplay').textContent = referralsCount.toLocaleString();
+
+            const adsPercent = Math.min((adsWatchedToday / DAILY_MAX) * 100, 100);
+            document.getElementById('dailyProgressFill').style.width = adsPercent + '%';
+
+            const spinsPercent = Math.min((spinsToday / DAILY_MAX_SPINS) * 100, 100);
+            document.getElementById('spinProgressFill').style.width = spinsPercent + '%';
+
+            // زر مشاهدة الإعلان
+            const watchAdBtn = document.getElementById('watchAdBtn');
+            if (watchAdBtn) {
+                if (adsWatchedToday >= DAILY_MAX) {
+                    watchAdBtn.disabled = true;
+                    watchAdBtn.textContent = `Limit Reached (${adsWatchedToday}/${DAILY_MAX})`;
+                } else {
+                    watchAdBtn.disabled = false;
+                    watchAdBtn.textContent = 'Watch Ad & Earn SHIB';
+                }
+            }
+
+            // شاشة الدوران
+            document.getElementById('spinBalanceDisplay').textContent = shibBalance.toLocaleString() + ' SHIB';
+            document.getElementById('spinCountDisplay').textContent = spinsToday;
+            if (spinBtn) {
+                if (spinsToday >= DAILY_MAX_SPINS) {
+                    spinBtn.disabled = true;
+                    spinBtn.textContent = `Limit Reached (${spinsToday}/${DAILY_MAX_SPINS})`;
+                } else if (!spinning) {
+                    spinBtn.disabled = false;
+                    spinBtn.textContent = 'SPIN';
+                }
+            }
+
+            // شاشة السحب
+            document.getElementById('withdrawBalanceDisplay').textContent = shibBalance.toLocaleString() + ' SHIB';
+            displayWithdrawals();
+        }
+        
+        async function watchAds(){
+            const now = Date.now();
+            const lastClick = parseInt(sessionStorage.getItem('lastAdClickTime') || 0);
+
+            if (now - lastClick < ADS_CLICK_COOLDOWN) {
+                Telegram.WebApp.showAlert('⚠️ Please wait a moment before watching another ad.');
+                return;
+            }
+            sessionStorage.setItem('lastAdClickTime', now);
+            
+            if(adsWatchedToday >= DAILY_MAX){
+                Telegram.WebApp.showAlert('✅ You have reached the daily limit of 100 ads. Come back tomorrow!');
+                return;
+            }
+            
+            // إظهار الإعلان أولاً
+            window.showGiga()
+                .then(async () => {
+                    // 1. طلب مكافأة الإعلان من الخادم (سيتم إرسال التوقيع والتحقق من الحد)
+                    const adResult = await fetchApi({
+                        type: 'watchAd' 
+                    });
+
+                    if (adResult.ok) {
+                        const actualReward = adResult.data.actual_reward; 
+                        
+                        // 2. تحديث الواجهة بالقيم الموثوقة من الخادم
+                        updateState({
+                            balance: adResult.data.new_balance,
+                            ads_watched_today: adResult.data.new_ads_count
+                        });
+                        
+                        // الخادم هو من يعالج العمولة والحدود الآن.
+                        
+                        Telegram.WebApp.showAlert('🎉 Ad watched successfully! You earned ' + actualReward + ' SHIB.');
+                        if(adResult.data.new_ads_count >= DAILY_MAX){
+                            Telegram.WebApp.showAlert('🎉 Great! You completed 100 ads today.');
+                        }
+                    }
+                })
+                .catch(e => {
+                    console.error("GigaPub Ad failed to show or was dismissed:", e);
+                    Telegram.WebApp.showAlert('❌ Failed to load ad. Please try again.');
+                });
+        }
+        function circleClick(){ console.log('Circle clicked'); }
+
+        /* ===== دوال شاشة Invite / Withdraw / Spin (التنقل) ===== */
+        
+        function showSpin(){ 
+            drawWheel(); 
+            mainScreen.classList.remove('visible'); 
+            document.getElementById('spinScreen').classList.add('visible'); 
+            updateUI(); 
+        }
+        function hideSpin(){ 
+            document.getElementById('spinScreen').classList.remove('visible'); 
+            mainScreen.classList.add('visible'); 
+            spinResult.textContent = 'Spin for a chance to win!';
+            updateUI(); 
+        }
+
+        function showWithdraw(){
+            document.getElementById('withdrawAmount').value = '';
+            document.getElementById('binanceId').value = '';
+            displayWithdrawals(); 
+            mainScreen.classList.remove('visible');
+            document.getElementById('withdrawScreen').classList.add('visible');
+            updateUI();
+        }
+        function hideWithdraw(){
+            document.getElementById('withdrawScreen').classList.remove('visible');
+            mainScreen.classList.add('visible');
+            updateUI();
+        }
+
+        function inviteFriends(){
+            mainScreen.classList.remove('visible');
+            document.getElementById('inviteScreen').classList.add('visible');
+            generateReferralLink();
+            updateUI();
+        }
+        function hideInvite(){
+            document.getElementById('inviteScreen').classList.remove('visible');
+            mainScreen.classList.add('visible');
+        }
+
+        function generateReferralLink(){
+            const referralLinkInput = document.getElementById('referralLinkInput');
+            if(!tgUser){ referralLinkInput.value='User data not available.'; return; }
+            const userId = tgUser.id;
+            // يجب تحديث [bot_username] باسم البوت الفعلي 
+            const botUsername = "Game_win_usdtBot"; // ⬅️ تأكد من أن هذا هو اسم البوت الصحيح
+            const inviteLink=`https://t.me/${botUsername}?startapp=ref_${userId}`;
+            referralLinkInput.value=inviteLink;
+        }
+
+        function copyReferralLink(){
+            const inviteLink=document.getElementById('referralLinkInput').value;
+            if(inviteLink==='User data not available.'||inviteLink==='Generating Link...'){ Telegram.WebApp.showAlert('Cannot copy: Referral link is not ready.'); return; }
+            navigator.clipboard.writeText(inviteLink).then(()=>{
+                Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+                Telegram.WebApp.showAlert('✅ Referral link copied to clipboard!');
+            }).catch(()=>Telegram.WebApp.showAlert('❌ Failed to copy link. Please try again.'));
+        }
+
+        async function startSpin(){
+            if(spinning) return;
+            
+            const now = Date.now();
+            const lastClick = parseInt(sessionStorage.getItem('lastSpinClickTime') || 0);
+
+            if (now - lastClick < SPIN_CLICK_COOLDOWN) {
+                Telegram.WebApp.showAlert('⚠️ Please wait a moment before spinning again.');
+                return;
+            }
+            sessionStorage.setItem('lastSpinClickTime', now);
+
+            if (spinsToday >= DAILY_MAX_SPINS) {
+                Telegram.WebApp.showAlert('⚠️ لقد وصلت إلى الحد الأقصى للدوران اليومي (15 مرة). يرجى العودة غداً!');
+                return;
+            }
+            
+            // 1. طلب تسجيل طلب الدوران أولاً (سيرسل التوقيع ويتحقق من الحد)
+            const spinReqResult = await fetchApi({ type: 'spin' });
+
+            if (!spinReqResult.ok) {
+                return; 
+            }
+            
+            // تحديث عداد الدورانات بالعدد الموثوق من الخادم
+            updateState({ spins_today: spinReqResult.data.new_spins_today });
+
+            // 2. استدعاء GigaPub
+            window.showGiga()
+                .then(async () => {
+                    spinning = true;
+                    spinBtn.disabled = true;
+                    spinResult.textContent = 'Spinning...';
+                    
+                    const spins = 5 + Math.random()*5; 
+                    const finalAngle = Math.random()*2*Math.PI;
+                    const totalAngle = spins*2*Math.PI + finalAngle;
+                    currentAngle += totalAngle;
+                    
+                    canvas.style.transition = 'transform 4s cubic-bezier(0.22,0,0.2,1)';
+                    canvas.style.transform = `rotate(${currentAngle}rad)`;
+                    
+                    setTimeout(async ()=>{
+                        canvas.style.transition = 'none'; 
+                        
+                        // 3. طلب تسجيل نتيجة الدوران وإضافة الجائزة للرصيد (سيرسل التوقيع)
+                        const spinResultRes = await fetchApi({
+                            type: 'spinResult' 
+                        });
+                        
+                        if (spinResultRes.ok) {
+                            const finalPrize = spinResultRes.data.actual_prize; 
+                            
+                            // 4. تحديث الرصيد بالرصيد الموثوق من الخادم
+                            updateState({ balance: spinResultRes.data.new_balance });
+                            spinResult.textContent = `🎉 You won ${finalPrize} SHIB!`;
+                            
+                        } else {
+                            spinResult.textContent = `❌ Error receiving prize. Please check logs.`;
+                        }
+                        
+                        spinning   = false;
+                        updateUI(); 
+                    },4000);
+
+                })
+                .catch(e => {
+                    console.error("GigaPub Ad failed to show or was dismissed:", e);
+                    Telegram.WebApp.showAlert('❌ Failed to load ad. Spin was not counted. Please try again.');
+                    // إذا فشل الإعلان، نعيد تحميل البيانات للتأكد من حالة الدوران
+                    loadUserData(); 
+                });
+        }
+
+        function displayWithdrawals() {
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = ''; 
+
+            if (withdrawalHistory.length === 0) {
+                historyList.innerHTML = '<p style="color:#aaa; text-align:center;">No history yet.</p>';
+                return;
+            }
+
+            let historyHTML = '';
+            // لا نحتاج لفرز هنا إذا كان الخادم يرسلها مرتبة
+            withdrawalHistory.forEach(item => {
+                historyHTML += `
+                    <div class="history-item">
+                        <span>${item.date}</span>
+                        <span>${item.amount.toLocaleString()} SHIB</span>
+                        <span class="status-${item.status}">${item.status}</span>
+                    </div>
+                `;
+            });
+
+            historyList.innerHTML = historyHTML;
+        }
+
+        async function confirmWithdraw(){
+            const binanceId = document.getElementById('binanceId').value.trim();
+            const amount = parseInt(document.getElementById('withdrawAmount').value);
+            
+            if(!binanceId || binanceId.length < 8){ Telegram.WebApp.showAlert('Please enter a valid Binance User ID (min 8 digits).'); return; }
+            if(isNaN(amount) || amount < 400){ Telegram.WebApp.showAlert('Minimum withdrawal is 400 SHIB.'); return; }
+            if(amount > shibBalance){ Telegram.WebApp.showAlert('Insufficient balance. Your current balance is ' + shibBalance.toLocaleString() + ' SHIB.'); return; }
+            
+            // 1. إرسال طلب السحب عبر API (سيرسل التوقيع ويتحقق من الحد الأدنى والرصيد)
+            const result = await fetchApi({
+                type: 'withdraw',
+                binanceId: binanceId,
+                amount: amount
+            });
+
+            if (result.ok) {
+                // 2. تحديث الرصيد بالرصيد الموثوق من الخادم
+                updateState({ balance: result.data.new_balance });
+                
+                // 3. إعادة تحميل سجل السحوبات بالبيانات الجديدة
+                await loadUserData(); 
+                displayWithdrawals(); 
+                
+                Telegram.WebApp.showAlert('✅ Withdrawal request sent successfully!\n\nBinance ID: '+binanceId+'\nAmount: '+amount.toLocaleString()+' SHIB\n\nThe amount will be transferred to your account within 24 hours.');
+            }
+        }
+    </script>
+</body>
+</html>
